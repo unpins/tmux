@@ -17,5 +17,16 @@ jobs:
     with:
       package_name: 'tmux'
       package_data: true
+      # darwin-x86_64 is cross-built from the aarch64-darwin runner using
+      # pkgsCross.x86_64-darwin (same single-runner pattern as Windows from
+      # Linux). macos-13 (Intel) is intentionally dropped — Apple-silicon
+      # runners are plentiful, Intel ones are increasingly scarce.
+      platforms: |
+        [
+          {"runner":"ubuntu-latest",    "os":"linux",   "arch":"x86_64"},
+          {"runner":"ubuntu-24.04-arm", "os":"linux",   "arch":"aarch64"},
+          {"runner":"macos-14",         "os":"darwin",  "arch":"aarch64"},
+          {"runner":"macos-14",         "os":"darwin",  "arch":"x86_64", "attr":"packages.aarch64-darwin.\"darwin-x86_64\""}
+        ]
     secrets:
       CACHIX_AUTH_TOKEN: ${{ secrets.CACHIX_AUTH_TOKEN }}
