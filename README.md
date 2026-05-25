@@ -40,3 +40,18 @@ The first invocation will offer to add the [unpins.cachix.org](https://unpins.ca
 ## Manual download
 
 The [Releases](https://github.com/unpins/tmux/releases) page has standalone binaries and a `.tar.zst` data archive (man pages and completions) for manual download.
+
+## Build notes
+
+### Embedded resources
+
+- **Terminfo fallback list** — a curated set of terminal definitions (xterm, xterm-256color, tmux, tmux-256color, screen, vt100, linux, alacritty, kitty, ghostty, foot, …) is baked into the linked `ncurses` so tmux's outer-terminal rendering works on hosts without `/usr/share/terminfo` (scratch containers, Alpine without `ncurses-terminfo`, busybox-init, …). Host terminfo still wins when present.
+
+### Platforms
+
+- **Windows excluded.** Upstream tmux doesn't support Windows. The codebase relies on `fork()` + `forkpty`/`grantpt`, AF_UNIX sockets, POSIX signal handlers, controlling-terminal semantics, and `pselect` — none of which mingw or cosmocc provide for Windows targets. There's no portable native-binary path; tmux only runs on POSIX hosts.
+
+### Darwin-specific patches
+
+- **Drop `-lresolv` probe in `configure.ac`** — linking `libresolv` would drag `libresolv.9.dylib` into the runtime closure (single-binary policy); failing the probe makes tmux fall back to its bundled `compat/base64.c`.
+- **Drop `#include <resolv.h>` from `compat/base64.c`** — darwin's `<resolv.h>` macro-renames `b64_ntop` → `res_9_b64_ntop`, so the bundled implementation kept defining `_res_9_b64_ntop` and `_b64_ntop` stayed undefined at link time.
