@@ -8,9 +8,16 @@
 
   inputs.unpins-lib.url = "github:unpins/nix-lib";
 
-  # darwin: pkgsStatic.tmux's configure.ac passes `-static` globally → libSystem
-  # link probe fails. Fall back to regular tmux with deps' shared libs pruned;
-  # runtime closure ends up libSystem-only either way.
+  # darwin: build the same pkgsStatic.tmux as linux. configure.ac turns the
+  # global `--enable-static` (added by pkgsStatic) into `LDFLAGS=-static`, which
+  # breaks the libSystem link probe (darwin has no static libc) — but
+  # mkStandaloneFlake's filterEnableStaticOnDarwin already strips `--enable-static`
+  # for us, and we push `--disable-shared` back via the bash configureFlagsArray
+  # (invisible to that Nix-list filter, same dodge as curl/file). Every pkgsStatic
+  # dep is .a-only, so the final link can't pick up a `.dylib`. The earlier
+  # "regular tmux + pruned shared deps" approach was fragile: a regular ncurses
+  # could leak transitively into the sandbox and win the `-search_paths_first
+  # -lncursesw` race against the static `.a`.
   #
   # Plus postPatch: tmux's configure.ac probes `b64_ntop` against -lresolv;
   # on darwin libresolv provides it so tmux links libresolv.9.dylib. We only
@@ -40,13 +47,21 @@
           ulib = unpins-lib.lib;
           p = pkgs.pkgsStatic;
           ncursesFB = ulib.embedFallbackTerminfo p.ncurses;
+          base = p.tmux.override {
+            ncurses = ncursesFB;
+            libevent = ulib.nativeFixes.libevent p;
+          };
         in
         if p.stdenv.hostPlatform.isDarwin
         then
-          ((ulib.withDepsSharedPruned pkgs pkgs.tmux).override {
-            ncurses = ncursesFB;
-            libevent = ulib.nativeFixes.libevent pkgs;
-          }).overrideAttrs (old: {
+          base.overrideAttrs (old: {
+            # See the header comment: re-add --disable-shared past the darwin
+            # static-flag filter so libtool resolves the deps' .a, and drop the
+            # -lresolv b64_ntop probe + its <resolv.h> include so the bundled
+            # compat/base64.c (not the macro-renamed libresolv symbol) is used.
+            preConfigure = (old.preConfigure or "") + ''
+              configureFlagsArray+=("--disable-shared")
+            '';
             postPatch = (old.postPatch or "") + ''
               substituteInPlace configure.ac \
                 --replace-fail 'LIBS="$OLD_LIBS -lresolv"' 'LIBS="$OLD_LIBS"'
@@ -54,10 +69,6 @@
                 --replace-fail '#include <resolv.h>' ""
             '';
           })
-        else
-          p.tmux.override {
-            ncurses = ncursesFB;
-            libevent = ulib.nativeFixes.libevent p;
-          };
+        else base;
     };
 }
