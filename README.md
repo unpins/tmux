@@ -39,7 +39,11 @@ The first invocation will offer to add the [unpins.cachix.org](https://unpins.ca
 
 ## Manual download
 
-The [Releases](https://github.com/unpins/tmux/releases) page has standalone binaries and a `.tar.zst` data archive (man pages and completions) for manual download.
+The [Releases](https://github.com/unpins/tmux/releases) page has standalone binaries for manual download.
+
+## Man pages
+
+`tmux.1` is embedded in the binary — read it with `unpin man tmux`.
 
 ## Build notes
 
@@ -49,7 +53,7 @@ The [Releases](https://github.com/unpins/tmux/releases) page has standalone bina
 
 ### Platforms
 
-- **Windows excluded.** Upstream tmux doesn't support Windows. The codebase relies on `fork()` + `forkpty`/`grantpt`, AF_UNIX sockets, POSIX signal handlers, controlling-terminal semantics, and `pselect` — none of which mingw or cosmocc provide for Windows targets. There's no portable native-binary path; tmux only runs on POSIX hosts.
+- **Windows excluded.** tmux is built on the Unix terminal model — pseudo-terminals (`forkpty`/`grantpt`/`openpty`), a controlling terminal, job control, and process sessions — on top of `fork()`, AF_UNIX sockets, and POSIX signals. This is an OS gap, not a toolchain one: cosmocc actually declares `fork()` and the full POSIX pty API, but on a Windows *host* there is no pseudo-terminal device or session/job-control model for them to bind to (Windows' native equivalent, ConPTY, is a different abstraction tmux doesn't target). The native Linux and macOS builds already cover every POSIX host, so a Cosmopolitan APE would only add Windows — the one platform where tmux's core can't run — and buys nothing.
 
 ### Darwin-specific patches
 
