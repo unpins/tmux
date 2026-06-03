@@ -8,18 +8,18 @@ Standalone build of [tmux](https://github.com/tmux/tmux).
 
 Part of the [unpins](https://unpins.org) project — native single-binary builds with no third-party runtime dependencies.
 
-## Installation
+## Usage
 
-Install with [unpin](https://github.com/unpins/unpin):
+Run the `tmux` program with [unpin](https://github.com/unpins/unpin):
 
 ```bash
 unpin tmux
 ```
 
-Or run without installing:
+To install it onto your PATH:
 
 ```bash
-unpin run tmux
+unpin install tmux
 ```
 
 ## Build locally
