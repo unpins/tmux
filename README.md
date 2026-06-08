@@ -1,12 +1,12 @@
 # tmux
 
-Standalone build of [tmux](https://github.com/tmux/tmux).
+[tmux](https://github.com/tmux/tmux) as a single self-contained binary, built natively for Linux and macOS.
 
 [![CI](https://github.com/unpins/tmux/actions/workflows/tmux.yml/badge.svg)](https://github.com/unpins/tmux/actions)
 ![Linux](https://img.shields.io/badge/Linux-✓-success?logo=linux&logoColor=white)
 ![macOS](https://img.shields.io/badge/macOS-✓-success?logo=apple&logoColor=white)
 
-Part of the [unpins](https://unpins.org) project — native single-binary builds with no third-party runtime dependencies.
+Part of the [unpins](https://unpins.org) catalog; install it with [`unpin`](https://github.com/unpins/unpin): `unpin install tmux`.
 
 ## Usage
 
@@ -21,6 +21,10 @@ To install it onto your PATH:
 ```bash
 unpin install tmux
 ```
+
+## Man pages
+
+`tmux.1` is embedded in the binary — read it with `unpin man tmux`.
 
 ## Build locally
 
@@ -40,10 +44,6 @@ The first invocation will offer to add the [unpins.cachix.org](https://unpins.ca
 ## Manual download
 
 The [Releases](https://github.com/unpins/tmux/releases) page has standalone binaries for manual download.
-
-## Man pages
-
-`tmux.1` is embedded in the binary — read it with `unpin man tmux`.
 
 ## Build notes
 
