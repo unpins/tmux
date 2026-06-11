@@ -1,5 +1,5 @@
 {
-  description = "Standalone build of tmux";
+  description = "tmux as a single self-contained binary";
 
   nixConfig = {
     extra-substituters = [ "https://unpins.cachix.org" ];
@@ -18,6 +18,18 @@
   # "regular tmux + pruned shared deps" approach was fragile: a regular ncurses
   # could leak transitively into the sandbox and win the `-search_paths_first
   # -lncursesw` race against the static `.a`.
+  #
+  # Plus passthru.terminfo: on darwin (and only darwin — see package.nix line
+  # 76/87) nixpkgs builds a `tmux-terminfo` derivation that runs ncurses'
+  # `tic`/`infocmp`, and the main derivation force-references it via
+  # `propagated-user-env-packages`. Those tools come from the *host* ncurses, so
+  # on a cross build they're host-arch binaries the build host can't run unless
+  # emulated. CI's native (aarch64→aarch64) and arm→x86 (Rosetta) darwin builds
+  # cope; the Intel-Mac → arm64 local check (./build-aarch64-darwin) has no
+  # emulator and dies with "Bad CPU type". terminfo is architecture-independent,
+  # so we compile it with the BUILD-native ncurses tic (p.buildPackages.ncurses).
+  # This is a no-op on native darwin (buildPackages.ncurses == ncurses) and never
+  # runs on Linux (the symlink branch needs no tic).
   #
   # Plus postPatch: tmux's configure.ac probes `b64_ntop` against -lresolv;
   # on darwin libresolv provides it so tmux links libresolv.9.dylib. We only
@@ -68,6 +80,13 @@
               substituteInPlace compat/base64.c \
                 --replace-fail '#include <resolv.h>' ""
             '';
+            # Compile the darwin terminfo passthru with the BUILD-native ncurses
+            # tic/infocmp (host tic can't run when cross-building — see header).
+            passthru = old.passthru // {
+              terminfo = old.passthru.terminfo.overrideAttrs (_: {
+                nativeBuildInputs = [ p.buildPackages.ncurses ];
+              });
+            };
           })
         else base;
     };
