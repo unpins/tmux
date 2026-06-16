@@ -53,7 +53,7 @@ The [Releases](https://github.com/unpins/tmux/releases) page has standalone bina
 
 ### Platforms
 
-- **Windows excluded.** tmux is built on the Unix terminal model — pseudo-terminals (`forkpty`/`grantpt`/`openpty`), a controlling terminal, job control, and process sessions — on top of `fork()`, AF_UNIX sockets, and POSIX signals. This is an OS gap, not a toolchain one: cosmocc actually declares `fork()` and the full POSIX pty API, but on a Windows *host* there is no pseudo-terminal device or session/job-control model for them to bind to (Windows' native equivalent, ConPTY, is a different abstraction tmux doesn't target). The native Linux and macOS builds already cover every POSIX host, so a Cosmopolitan APE would only add Windows — the one platform where tmux's core can't run — and buys nothing.
+- **Windows excluded.** tmux is built on the Unix terminal model — pseudo-terminals (`forkpty`/`grantpt`/`openpty`), a controlling terminal, job control, and process sessions — on top of `fork()`, AF_UNIX sockets, and POSIX signals. This is an OS gap, not a toolchain one: cosmocc actually declares `fork()` and the full POSIX pty API, but on a Windows *host* there is no pseudo-terminal device or session/job-control model for them to bind to (Windows' native equivalent, ConPTY, is a different abstraction tmux doesn't target). The native Linux and macOS builds already cover every POSIX host, so a Cosmopolitan build would only add Windows — the one platform where tmux's core can't run — and buys nothing.
 
 ### Darwin-specific patches
 
