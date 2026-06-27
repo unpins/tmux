@@ -54,13 +54,20 @@
     unpins-lib.lib.mkStandaloneFlake {
       inherit self;
       name = "tmux";
+
+      # Build via the unpin-llvm engine + emit a bitcode multicall module.
+      engine = "unpin-llvm";
+      multicall = {
+        programs = [{ name = "tmux"; }];
+      };
       build = pkgs:
         let
           ulib = unpins-lib.lib;
           p = pkgs.pkgsStatic;
-          ncursesFB = ulib.embedFallbackTerminfo p.ncurses;
+          # Fallback terminfo is baked centrally for every engine ncurses, linux +
+          # darwin (native-overlay/ncurses.nix), so p.ncurses already carries it.
           base = p.tmux.override {
-            ncurses = ncursesFB;
+            ncurses = p.ncurses;
             libevent = ulib.nativeFixes.libevent p;
           };
         in
