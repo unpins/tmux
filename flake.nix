@@ -19,37 +19,44 @@
   # could leak transitively into the sandbox and win the `-search_paths_first
   # -lncursesw` race against the static `.a`.
   #
-  # Plus passthru.terminfo: on darwin (and only darwin — see package.nix line
-  # 76/87) nixpkgs builds a `tmux-terminfo` derivation that runs ncurses'
-  # `tic`/`infocmp`, and the main derivation force-references it via
-  # `propagated-user-env-packages`. Those tools come from the *host* ncurses, so
-  # on a cross build they're host-arch binaries the build host can't run unless
-  # emulated. CI's native (aarch64→aarch64) and arm→x86 (Rosetta) darwin builds
-  # cope; the Intel-Mac → arm64 local check (./build-aarch64-darwin) has no
-  # emulator and dies with "Bad CPU type". terminfo is architecture-independent,
-  # so we compile it with the BUILD-native ncurses tic (p.buildPackages.ncurses).
-  # This is a no-op on native darwin (buildPackages.ncurses == ncurses) and never
-  # runs on Linux (the symlink branch needs no tic).
+  # Plus (darwin only) drop the `propagated-user-env-packages` postInstall:
+  # nixpkgs' tmux, on darwin only (package.nix line 76), force-references a
+  # `tmux-terminfo` passthru derivation that copies the `tmux`/`tmux-256color`
+  # entries out of `${ncurses}/share/terminfo`. But the engine ncurses is built
+  # `--disable-db-install` (native-overlay/ncurses.nix), so it ships NO on-disk
+  # terminfo db at all — only the curated fallback set compiled into libtinfo.a
+  # (which already includes `tmux,tmux-256color`). The copy therefore fails
+  # ("cannot stat …/share/terminfo/74/tmux"). That whole propagated-terminfo
+  # mechanism only matters for a nix-env profile install; our single
+  # self-contained binary carries the fallback terminfo inside its linked
+  # libtinfo.a, so the passthru is dead weight. Clear the darwin-only postInstall
+  # (its sole job is that echo) → the broken derivation is never referenced or
+  # built. (On Linux postInstall is already empty, so the passthru — whose Linux
+  # branch would fail the same way — is never forced there either.)
   #
-  # Plus postPatch: tmux's configure.ac probes `b64_ntop` against -lresolv;
-  # on darwin libresolv provides it so tmux links libresolv.9.dylib. We only
-  # want libSystem in the binary, so disable that probe — tmux falls back to
-  # its bundled compat/base64.c.
-  #
-  # Second patch: darwin's <resolv.h> macros-rename `b64_ntop` to
-  # `res_9_b64_ntop`. compat.h `#undef`s these macros at call sites, but
-  # compat/base64.c (the bundled implementation) still picks them up and
-  # ends up defining `_res_9_b64_ntop`, leaving `_b64_ntop` undefined.
-  # Drop the unused `#include <resolv.h>` from compat/base64.c so the
-  # function names match across translation units.
+  # Plus postPatch (darwin): tmux includes <resolv.h> for the b64_ntop/b64_pton
+  # declarations (configure.ac probe + input.c/tty.c/tty-keys.c/compat/base64.c).
+  # nixpkgs' apple-sdk doesn't ship <resolv.h> at all, so the configure probe
+  # fails to compile → HAVE_B64_NTOP stays undefined → tmux's compat.h declares
+  # b64_ntop/b64_pton itself and the bundled compat/base64.c implements them.
+  # That's exactly what we want (libSystem-only, no libresolv), but the four
+  # source TUs still `#include <resolv.h>` unconditionally and won't compile
+  # without the header, so we strip that include from all of them; the decls
+  # then come from compat.h via tmux.h. We also neutralise the probe's
+  # `-lresolv` fallback in configure.ac as a guard: if a future SDK *does* ship
+  # resolv.h, the probe must still resolve to "no" so the bundled base64 (which
+  # the stripped TUs now rely on) stays selected.
   #
   # All platforms: bake the curated terminfo fallback list into ncurses →
   # tmux's outer-terminal rendering works on hosts without
   # `/usr/share/terminfo`. Host terminfo still wins when present.
   #
-  # libevent fix (pkg-config injection for armv7l static link) lives in
-  # nix-lib/native-overlay/libevent.nix and is shared via
-  # `unpins-lib.lib.nativeFixes.libevent`.
+  # libevent is built with sslSupport = false: tmux uses libevent only for its
+  # event loop, never the openssl bufferevents, so linking OpenSSL in was pure
+  # dead weight — a multi-MB libcrypto/libssl in the closure plus openssl's
+  # flaky static-musl `make check` (DH "not safe prime") that broke the build.
+  # Dropping it also retires the nix-lib nativeFixes.libevent pkg-config shim,
+  # which only existed for OpenSSL's armv7l libcrypto.pc `Libs.private` probe.
   outputs = { self, unpins-lib }:
     unpins-lib.lib.mkStandaloneFlake {
       inherit self;
@@ -62,13 +69,26 @@
       };
       build = pkgs:
         let
-          ulib = unpins-lib.lib;
           p = pkgs.pkgsStatic;
           # Fallback terminfo is baked centrally for every engine ncurses, linux +
           # darwin (native-overlay/ncurses.nix), so p.ncurses already carries it.
+          # libevent with SSL off (see header): drops the OpenSSL closure + its
+          # flaky static-musl test suite that tmux never needed.
           base = p.tmux.override {
             ncurses = p.ncurses;
-            libevent = ulib.nativeFixes.libevent p;
+            libevent = p.libevent.override { sslSupport = false; };
+            # nixpkgs' libutempter lists glib as a buildInput, but its source
+            # (utempter.c/iface.c) includes nothing from glib and its Makefile
+            # sets `LDLIBS =` empty with no pkg-config — glib is pure vestigial
+            # cruft. Left in, it drags the entire glib closure (gio, pcre2,
+            # libffi, util-linux, sqlite, …) into tmux's *build* graph on every
+            # arch — a multi-minute-per-arch build for zero effect on the output.
+            # Drop it via the `glib` arg (overrideAttrs on buildInputs is a
+            # silent no-op under pkgsStatic splicing); stdenv filters the null,
+            # so libutempter.a is byte-identical and the build graph loses a huge
+            # subtree. (utmp recording via the utempter helper is plain libc,
+            # unaffected.)
+            libutempter = p.libutempter.override { glib = null; };
           };
         in
         if p.stdenv.hostPlatform.isDarwin
@@ -84,16 +104,25 @@
             postPatch = (old.postPatch or "") + ''
               substituteInPlace configure.ac \
                 --replace-fail 'LIBS="$OLD_LIBS -lresolv"' 'LIBS="$OLD_LIBS"'
-              substituteInPlace compat/base64.c \
+              # nixpkgs' apple-sdk has no <resolv.h>; these TUs include it only
+              # for b64_ntop/b64_pton, which compat.h (via tmux.h) declares and
+              # the bundled compat/base64.c implements. Drop the unresolvable
+              # include from every consumer so the darwin build compiles.
+              substituteInPlace input.c tty.c tty-keys.c compat/base64.c \
                 --replace-fail '#include <resolv.h>' ""
+              # The bundled base64.c also pulls <arpa/nameser.h> (equally absent
+              # from the SDK) but uses nothing from it — it's a pure base64 impl.
+              substituteInPlace compat/base64.c \
+                --replace-fail '#include <arpa/nameser.h>' ""
             '';
-            # Compile the darwin terminfo passthru with the BUILD-native ncurses
-            # tic/infocmp (host tic can't run when cross-building — see header).
-            passthru = old.passthru // {
-              terminfo = old.passthru.terminfo.overrideAttrs (_: {
-                nativeBuildInputs = [ p.buildPackages.ncurses ];
-              });
-            };
+            # Drop the darwin-only `propagated-user-env-packages` echo (see
+            # header): it force-references the `tmux-terminfo` passthru, which
+            # copies from the engine ncurses' on-disk terminfo db — a db that
+            # doesn't exist (`--disable-db-install`). The fallback terminfo
+            # (incl. tmux/tmux-256color) is already baked into the linked
+            # libtinfo.a, so this propagation is dead weight for our standalone
+            # binary. Clearing it stops the broken passthru from being built.
+            postInstall = "";
           })
         else base;
     };
