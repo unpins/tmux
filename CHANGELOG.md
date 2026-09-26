@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [3.6a-2] - 2026-09-26
+
 ### Fixed
 
 - The binary no longer carries a path into the machine that built it (the
